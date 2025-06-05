@@ -40,7 +40,7 @@ const Index: React.FC = () => {
       console.log('Processing query:', userQuery);
       const result = await searchAndSummarize(userQuery);
 
-      const fullResponse = `I am AMIRA, and I'm happy to help you. ${result}`;
+      const fullResponse = ` ${result}`;
       setResponse(fullResponse);
       setStatus('Speaking response...');
       setIsSpeaking(true);
@@ -50,7 +50,7 @@ const Index: React.FC = () => {
       setStatus('Ready to listen');
     } catch (error) {
       console.error('Error processing query:', error);
-      const errorResponse = "I am AMIRA, and I'm happy to help you. Sorry, I encountered an error while processing your request.";
+      const errorResponse = "Sorry, I encountered an error while processing your request.";
       setResponse(errorResponse);
       setStatus('Speaking error message...');
       setIsSpeaking(true);
@@ -99,7 +99,7 @@ const Index: React.FC = () => {
       <div className="max-w-4xl w-full space-y-8">
         {/* Header */}
         <div className="text-center space-y-4">
-          <h1 className="text-6xl font-bold gradient-text mb-2">AMIRA</h1>
+          <h1 className="text-6xl font-bold gradient-text mb-2">AGILE</h1>
           <p className="text-xl text-gray-300">AI Voice Assistant for Web Search</p>
           <StatusIndicator status={status} isActive={isActive} />
         </div>
