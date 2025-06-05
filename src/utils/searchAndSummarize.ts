@@ -23,21 +23,56 @@ const initSummarizer = async () => {
 // Main search function using Google Custom Search API
 const fetchSearchResults = async (query: string): Promise<string> => {
   try {
-    // Google Custom Search API endpoint
-    const searchUrl = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_API_KEY}&cx=${SEARCH_ENGINE_ID}&q=${encodeURIComponent(query)}&num=5`;
-    
-    const response = await fetch(searchUrl);
-    
-    if (!response.ok) {
-      throw new Error(`Google Search API error! status: ${response.status}`);
+    // Clean and validate the query
+    const cleanQuery = query.trim();
+    if (!cleanQuery) {
+      return "Please provide a search query.";
     }
     
+    // Google Custom Search API endpoint
+    const searchUrl = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_API_KEY}&cx=${SEARCH_ENGINE_ID}&q=${encodeURIComponent(cleanQuery)}&num=5`;
+    
+    console.log('Search URL:', searchUrl); // Debug log
+    console.log('Searching for:', cleanQuery); // Debug log
+    
+    const response = await fetch(searchUrl);
     const data = await response.json();
+    
+    console.log('API Response:', data); // Debug log
+    
+    if (!response.ok) {
+      console.error('API Error Response:', data);
+      
+      // Handle specific Google API errors
+      if (data.error) {
+        const errorMessage = data.error.message || 'Unknown API error';
+        const errorCode = data.error.code || response.status;
+        
+        switch (errorCode) {
+          case 400:
+            return `Search error: ${errorMessage}. Please try a different search term.`;
+          case 403:
+            return "API quota exceeded or access denied. Please check your API key and billing.";
+          case 429:
+            return "Too many requests. Please wait a moment and try again.";
+          default:
+            return `Search API error (${errorCode}): ${errorMessage}`;
+        }
+      }
+      
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
     
     // Check if we have search results
     if (!data.items || data.items.length === 0) {
-      return `No search results found for "${query}".`;
+      // Check if there's a reason for no results
+      if (data.searchInformation && data.searchInformation.totalResults === "0") {
+        return `No search results found for "${cleanQuery}". Try using different keywords.`;
+      }
+      return `No search results found for "${cleanQuery}".`;
     }
+    
+    console.log(`Found ${data.items.length} results`); // Debug log
     
     // Combine content from multiple results for better context
     const combinedContent = data.items
@@ -50,19 +85,17 @@ const fetchSearchResults = async (query: string): Promise<string> => {
       })
       .join(' '); // Join with space for better flow
     
-    return combinedContent || `Found results for "${query}" but no detailed content available.`;
+    return combinedContent || `Found results for "${cleanQuery}" but no detailed content available.`;
     
   } catch (error) {
     console.error('Google Search API failed:', error);
     
-    // Handle specific API errors
-    if (error instanceof Error && error.message.includes('403')) {
-      return "Search quota exceeded. Please try again later.";
-    } else if (error instanceof Error && error.message.includes('400')) {
-      return "Invalid search query. Please try rephrasing your question.";
+    // More detailed error handling
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      return "Network error. Please check your internet connection and try again.";
     }
     
-    return `I couldn't search for information about "${query}". This might be due to API limitations or network issues.`;
+    return `Search failed: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`;
   }
 };
 
@@ -154,6 +187,29 @@ export const searchAndSummarizeDetailed = async (query: string): Promise<string>
   } catch (error) {
     console.error('Error in detailed searchAndSummarize:', error);
     return "I'm sorry, I couldn't find or process information for that query. Would you like to try asking something else?";
+  }
+};
+
+// Debug function to test API configuration
+export const testApiConfiguration = async (): Promise<string> => {
+  try {
+    const testQuery = "test";
+    const searchUrl = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_API_KEY}&cx=${SEARCH_ENGINE_ID}&q=${testQuery}&num=1`;
+    
+    console.log('Testing with URL:', searchUrl);
+    
+    const response = await fetch(searchUrl);
+    const data = await response.json();
+    
+    if (response.ok && data.items && data.items.length > 0) {
+      return "✅ API configuration is working correctly!";
+    } else if (data.error) {
+      return `❌ API Error: ${data.error.message} (Code: ${data.error.code})`;
+    } else {
+      return `⚠️ API responded but no results found. Status: ${response.status}`;
+    }
+  } catch (error) {
+    return `❌ Connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
   }
 };
 
