@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Mic, MicOff, Volume2, Brain, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -11,14 +10,14 @@ import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { useTextToSpeech } from '@/hooks/useTextToSpeech';
 import { searchAndSummarize } from '@/utils/searchAndSummarize';
 
-const Index = () => {
+const Index: React.FC = () => {
   const [isListening, setIsListening] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [query, setQuery] = useState('');
   const [response, setResponse] = useState('');
   const [status, setStatus] = useState('Ready to listen');
-  
+
   const { toast } = useToast();
   const { startListening, stopListening, transcript, isSupported } = useSpeechRecognition();
   const { speak } = useTextToSpeech();
@@ -33,19 +32,19 @@ const Index = () => {
 
   const processQuery = async (userQuery: string) => {
     if (!userQuery.trim()) return;
-    
+
     setIsProcessing(true);
     setStatus('Searching and processing...');
-    
+
     try {
       console.log('Processing query:', userQuery);
       const result = await searchAndSummarize(userQuery);
-      
+
       const fullResponse = `I am AMIRA, and I'm happy to help you. ${result}`;
       setResponse(fullResponse);
       setStatus('Speaking response...');
       setIsSpeaking(true);
-      
+
       await speak(fullResponse);
       setIsSpeaking(false);
       setStatus('Ready to listen');
@@ -55,11 +54,11 @@ const Index = () => {
       setResponse(errorResponse);
       setStatus('Speaking error message...');
       setIsSpeaking(true);
-      
+
       await speak(errorResponse);
       setIsSpeaking(false);
       setStatus('Ready to listen');
-      
+
       toast({
         title: "Error",
         description: "Failed to process your query. Please try again.",
@@ -157,17 +156,6 @@ const Index = () => {
 
         {/* Response Display */}
         <ResponseDisplay response={response} isSpeaking={isSpeaking} />
-
-        {/* Instructions */}
-        <Card className="p-6 bg-white/5 backdrop-blur border-white/10">
-          <h3 className="text-lg font-semibold mb-3 text-white">How to use AMIRA</h3>
-          <ul className="space-y-2 text-gray-300">
-            <li>• Click the microphone button to start listening</li>
-            <li>• Ask any question you'd like to search for</li>
-            <li>• AMIRA will search the web and provide a spoken response</li>
-            <li>• Wait for the response to complete before asking another question</li>
-          </ul>
-        </Card>
       </div>
     </div>
   );
