@@ -1,5 +1,36 @@
-
 import { useState, useEffect, useRef } from 'react';
+
+// Define SpeechRecognition interface for TypeScript
+interface SpeechRecognition extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start: () => void;
+  stop: () => void;
+  onresult: (event: SpeechRecognitionEvent) => void;
+  onerror: (event: SpeechRecognitionErrorEvent) => void;
+  onend: () => void;
+}
+
+interface SpeechRecognitionEvent {
+  results: SpeechRecognitionResultList;
+}
+
+interface SpeechRecognitionResultList {
+  [index: number]: SpeechRecognitionResult;
+}
+
+interface SpeechRecognitionResult {
+  [index: number]: SpeechRecognitionAlternative;
+}
+
+interface SpeechRecognitionAlternative {
+  transcript: string;
+}
+
+interface SpeechRecognitionErrorEvent {
+  error: string;
+}
 
 interface SpeechRecognitionHook {
   startListening: () => void;
@@ -15,23 +46,25 @@ export const useSpeechRecognition = (): SpeechRecognitionHook => {
 
   useEffect(() => {
     // Check if speech recognition is supported
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    
+    const SpeechRecognition = (window.SpeechRecognition || window.webkitSpeechRecognition) as {
+      new (): SpeechRecognition;
+    } | undefined;
+
     if (SpeechRecognition) {
       setIsSupported(true);
-      
+
       const recognition = new SpeechRecognition();
       recognition.continuous = false;
       recognition.interimResults = false;
       recognition.lang = 'en-US';
 
-      recognition.onresult = (event) => {
+      recognition.onresult = (event: SpeechRecognitionEvent) => {
         const result = event.results[0][0].transcript;
         console.log('Speech recognition result:', result);
         setTranscript(result);
       };
 
-      recognition.onerror = (event) => {
+      recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
         console.error('Speech recognition error:', event.error);
         setTranscript('');
       };
