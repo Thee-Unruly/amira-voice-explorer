@@ -1,7 +1,7 @@
 import { pipeline } from '@huggingface/transformers';
 
 // Configuration - Replace with your actual Search Engine ID
-const GOOGLE_API_KEY = 'AIzaSyBPPPeDIsLyOHWSWQQfnH1-hNqDZuV69E';
+const GOOGLE_API_KEY = 'AIzaSyAX1JmxHyo2fuXi2F5rUVlJcdkWhS7H2zI';
 const SEARCH_ENGINE_ID = '81e9b1268d8644286';
 
 // Setup for summarizer pipeline
