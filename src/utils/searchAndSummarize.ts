@@ -2,7 +2,7 @@
 import { pipeline, SummarizationOutput } from '@huggingface/transformers';
 
 // Configuration - Store API keys in environment variables for security
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
+const OPENROUTER_API_KEY = import.meta.env.VITE_OPENROUTER_API_KEY || '';
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 // Interface for OpenRouter API response
@@ -27,7 +27,7 @@ const initSummarizer = async (): Promise<any> => {
   if (!summarizer) {
     try {
       summarizer = await pipeline('summarization', 'facebook/bart-large-cnn', {
-        cacheDir: './model-cache',
+        cache_dir: './model-cache',
       });
     } catch (error) {
       console.error('Failed to load summarizer model:', error);
