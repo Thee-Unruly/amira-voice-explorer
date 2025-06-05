@@ -21,17 +21,27 @@ interface SearchResult {
 
 // Summarizer instance
 let summarizer: any = null;
+let summarizerInitialized = false;
+let summarizerFailed = false;
 
 // Initialize the summarizer with caching
 const initSummarizer = async (): Promise<any> => {
-  if (!summarizer) {
+  if (summarizerFailed) {
+    return null; // Don't try again if it already failed
+  }
+
+  if (!summarizer && !summarizerInitialized) {
+    summarizerInitialized = true;
     try {
-      summarizer = await pipeline('summarization', 'facebook/bart-large-cnn', {
+      console.log('Attempting to load summarizer model...');
+      summarizer = await pipeline('summarization', 'Xenova/distilbart-cnn-6-6', {
         cache_dir: './model-cache',
       });
+      console.log('Summarizer model loaded successfully');
     } catch (error) {
       console.error('Failed to load summarizer model:', error);
-      throw new Error('Failed to initialize AI model');
+      summarizerFailed = true;
+      return null;
     }
   }
   return summarizer;
@@ -77,7 +87,7 @@ const fetchDeepSeekResults = async (query: string): Promise<SearchResult> => {
         Authorization: `Bearer ${OPENROUTER_API_KEY}`,
       },
       body: JSON.stringify({
-        model: 'deepseek/deepseek-r1', // Using consistent model name
+        model: 'deepseek/deepseek-r1',
         messages: [
           {
             role: 'user',
@@ -181,6 +191,32 @@ const fetchNewsResults = async (query: string): Promise<SearchResult> => {
   }
 };
 
+// Helper function to create a manual summary when AI summarizer fails
+const createManualSummary = (content: string, maxLength: number = 300): string => {
+  if (content.length <= maxLength) {
+    return content;
+  }
+  
+  // Split into sentences and take the first few that fit within the limit
+  const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 0);
+  let summary = '';
+  
+  for (const sentence of sentences) {
+    const nextLength = summary.length + sentence.length + 1;
+    if (nextLength > maxLength) {
+      break;
+    }
+    summary += (summary ? '. ' : '') + sentence.trim();
+  }
+  
+  // Ensure it ends with proper punctuation
+  if (summary && !summary.match(/[.!?]$/)) {
+    summary += '.';
+  }
+  
+  return summary || content.substring(0, maxLength) + '...';
+};
+
 // Main function to search and summarize
 export const searchAndSummarize = async (query: string): Promise<string> => {
   try {
@@ -200,24 +236,35 @@ export const searchAndSummarize = async (query: string): Promise<string> => {
       return result.content;
     }
 
-    // Initialize summarizer and create summary
-    await initSummarizer();
+    // Try to initialize summarizer
+    const summarizerInstance = await initSummarizer();
 
-    const truncatedContent = result.content.slice(0, 1500);
+    let finalText = '';
 
-    const summary: SummarizationOutput = await summarizer(truncatedContent, {
-      max_length: 120,
-      min_length: 40,
-      do_sample: false,
-    });
-
-    let summaryText = summary[0].summary_text;
-    if (result.source) {
-      summaryText += `\n\nSource: ${result.source}`;
+    if (summarizerInstance) {
+      try {
+        const truncatedContent = result.content.slice(0, 1500);
+        const summary: SummarizationOutput = await summarizerInstance(truncatedContent, {
+          max_length: 120,
+          min_length: 40,
+          do_sample: false,
+        });
+        finalText = summary[0].summary_text;
+        console.log('Successfully generated AI summary');
+      } catch (error) {
+        console.error('Summarizer failed, using manual summary:', error);
+        finalText = createManualSummary(result.content, 300);
+      }
+    } else {
+      console.log('Summarizer not available, using manual summary');
+      finalText = createManualSummary(result.content, 300);
     }
 
-    console.log('Successfully generated summary');
-    return summaryText;
+    if (result.source) {
+      finalText += `\n\nSource: ${result.source}`;
+    }
+
+    return finalText;
   } catch (error) {
     console.error('Error in searchAndSummarize:', error);
     return "I'm sorry, I couldn't find or process information for that query. Would you like to try asking something else?";
@@ -242,22 +289,32 @@ export const searchAndSummarizeDetailed = async (query: string): Promise<string>
       return result.content;
     }
 
-    await initSummarizer();
+    const summarizerInstance = await initSummarizer();
 
-    const truncatedContent = result.content.slice(0, 2000);
+    let finalText = '';
 
-    const summary: SummarizationOutput = await summarizer(truncatedContent, {
-      max_length: 180,
-      min_length: 60,
-      do_sample: false,
-    });
-
-    let summaryText = summary[0].summary_text;
-    if (result.source) {
-      summaryText += `\n\nSource: ${result.source}`;
+    if (summarizerInstance) {
+      try {
+        const truncatedContent = result.content.slice(0, 2000);
+        const summary: SummarizationOutput = await summarizerInstance(truncatedContent, {
+          max_length: 180,
+          min_length: 60,
+          do_sample: false,
+        });
+        finalText = summary[0].summary_text;
+      } catch (error) {
+        console.error('Detailed summarizer failed, using manual summary:', error);
+        finalText = createManualSummary(result.content, 500);
+      }
+    } else {
+      finalText = createManualSummary(result.content, 500);
     }
 
-    return summaryText;
+    if (result.source) {
+      finalText += `\n\nSource: ${result.source}`;
+    }
+
+    return finalText;
   } catch (error) {
     console.error('Error in detailed searchAndSummarize:', error);
     return "I'm sorry, I couldn't find or process information for that query. Would you like to try asking something else?";
@@ -292,7 +349,13 @@ export const testApiConfiguration = async (): Promise<string> => {
       results.push(`⚠️ OpenRouter API responded but no results found. Status: ${openRouterResponse.status}`);
     }
 
-    results.push('ℹ️ NewsAPI has been removed due to CORS restrictions in browser environments.');
+    // Test summarizer
+    const summarizerInstance = await initSummarizer();
+    if (summarizerInstance) {
+      results.push('✅ AI Summarizer is working correctly!');
+    } else {
+      results.push('⚠️ AI Summarizer failed to load, using fallback manual summarization.');
+    }
 
     return results.join('\n');
   } catch (error) {
