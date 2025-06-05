@@ -127,7 +127,7 @@ const fetchDetailedDeepSeekResults = async (query: string): Promise<string> => {
         messages: [
           {
             role: 'user',
-            content: `Provide a detailed response to the query "${query}" with structured information, including key points and sources if available.`,
+            content: `Provide a detailed response to the query "${query}" with structured information, If the query involves current information, provide the most up-to-date information you have access to.`,
           },
         ],
         max_tokens: 1500,
