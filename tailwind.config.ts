@@ -62,7 +62,7 @@ export default {
           border: 'hsl(var(--sidebar-border))',
           ring: 'hsl(var(--sidebar-ring))'
         },
-        // Add custom color palette for agile-teal (#167AA1)
+        // Custom color palette for agile-teal (#167AA1)
         'agile-teal': {
           DEFAULT: '#167AA1', // Base color
           light: '#1E95C3',   // Lighter shade for hover effects
