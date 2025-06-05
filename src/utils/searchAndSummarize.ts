@@ -82,7 +82,7 @@ const fetchDeepSeekResults = async (query: string): Promise<SearchResult> => {
         Authorization: `Bearer ${OPENROUTER_API_KEY}`,
       },
       body: JSON.stringify({
-        model: 'deepseek/r1',
+        model: 'deepseek/deepseek-r1:free',
         messages: [
           {
             role: 'user',
