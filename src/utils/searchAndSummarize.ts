@@ -1,5 +1,8 @@
-
 import { pipeline } from '@huggingface/transformers';
+
+// Configuration - Replace with your actual Search Engine ID
+const GOOGLE_API_KEY = 'AIzaSyBPPPeDIsLyOHWSWQQfnH1-hNqDZuV69E';
+const SEARCH_ENGINE_ID = '81e9b1268d8644286';
 
 // Setup for summarizer pipeline
 let summarizer: any = null;
@@ -17,77 +20,99 @@ const initSummarizer = async () => {
   return summarizer;
 };
 
-// Function to scrape web content for a given query
+// Main search function using Google Custom Search API
 const fetchSearchResults = async (query: string): Promise<string> => {
   try {
-    // Create a URL for Wikipeda search
-    const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&format=json&origin=*&prop=extracts&exintro=true&explaintext=true&titles=${encodeURIComponent(query)}`;
-
-    // Make the request with proper headers
-    const response = await fetch(searchUrl, {
-      headers: {
-        'User-Agent': 'AMIRA/1.0 (educational project)',
-      },
-    });
-
+    // Google Custom Search API endpoint
+    const searchUrl = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_API_KEY}&cx=${SEARCH_ENGINE_ID}&q=${encodeURIComponent(query)}&num=5`;
+    
+    const response = await fetch(searchUrl);
+    
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw new Error(`Google Search API error! status: ${response.status}`);
     }
-
+    
     const data = await response.json();
     
-    // Extract content from response
-    const pages = data.query.pages;
-    const pageId = Object.keys(pages)[0];
-    
-    // Handle page not found
-    if (pageId === '-1') {
-      console.log('No Wikipedia article found for query:', query);
-      
-      // Fall back to a web search API
-      return await fallbackSearch(query);
+    // Check if we have search results
+    if (!data.items || data.items.length === 0) {
+      return `No search results found for "${query}".`;
     }
     
-    // Extract the content from Wikipedia response
-    const content = pages[pageId].extract;
+    // Combine content from multiple results for better context
+    const combinedContent = data.items
+      .slice(0, 5) // Use top 5 results
+      .map((item: any, index: number) => {
+        const title = item.title || '';
+        const snippet = item.snippet || '';
+        // Include more context by combining title and snippet
+        return `${title}: ${snippet}`;
+      })
+      .join(' '); // Join with space for better flow
     
-    return content || 'No information found';
+    return combinedContent || `Found results for "${query}" but no detailed content available.`;
+    
   } catch (error) {
-    console.error('Error fetching search results:', error);
-    return await fallbackSearch(query);
+    console.error('Google Search API failed:', error);
+    
+    // Handle specific API errors
+    if (error instanceof Error && error.message.includes('403')) {
+      return "Search quota exceeded. Please try again later.";
+    } else if (error instanceof Error && error.message.includes('400')) {
+      return "Invalid search query. Please try rephrasing your question.";
+    }
+    
+    return `I couldn't search for information about "${query}". This might be due to API limitations or network issues.`;
   }
 };
 
-// Fallback search function when Wikipedia doesn't have results
-const fallbackSearch = async (query: string): Promise<string> => {
+// Alternative function that gets more detailed content per result
+const fetchDetailedSearchResults = async (query: string): Promise<string> => {
   try {
-    // Using the DuckDuckGo API through a proxy (for demonstration)
-    const searchUrl = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json`;
+    const searchUrl = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_API_KEY}&cx=${SEARCH_ENGINE_ID}&q=${encodeURIComponent(query)}&num=3`;
     
-    // This is just a demonstration. In a real app, you would use a proper API or service
-    // For now, return a generic response to simulate a search
-    return `I found some information about ${query}, but it needs more research to provide a complete answer.`;
+    const response = await fetch(searchUrl);
+    const data = await response.json();
+    
+    if (!data.items || data.items.length === 0) {
+      return `No search results found for "${query}".`;
+    }
+    
+    // Format results with more structure
+    const formattedResults = data.items
+      .slice(0, 3)
+      .map((item: any, index: number) => {
+        const title = item.title || '';
+        const snippet = item.snippet || '';
+        const source = item.displayLink || '';
+        
+        return `Source ${index + 1} (${source}): ${title}\n${snippet}`;
+      })
+      .join('\n\n');
+    
+    return formattedResults;
+    
   } catch (error) {
-    console.error('Fallback search failed:', error);
-    return "I couldn't find specific information on that topic.";
+    console.error('Detailed search failed:', error);
+    return await fetchSearchResults(query); // Fall back to basic search
   }
 };
 
 // Main function to search and summarize
 export const searchAndSummarize = async (query: string): Promise<string> => {
   try {
-    // Fetch content related to the query
+    // Fetch content related to the query using Google Search
     const content = await fetchSearchResults(query);
     
-    // If the content is too short, return it directly
-    if (content.length < 200) {
+    // If the content is too short or indicates no results, return it directly
+    if (content.length < 200 || content.includes('No search results found')) {
       return content;
     }
     
     // Initialize the summarizer
     await initSummarizer();
     
-    // Truncate content if it's too long for the model
+    // Truncate content if it's too long for the model (BART has token limits)
     const truncatedContent = content.slice(0, 1000);
     
     // Summarize the content
@@ -101,5 +126,43 @@ export const searchAndSummarize = async (query: string): Promise<string> => {
   } catch (error) {
     console.error('Error in searchAndSummarize:', error);
     return "I'm sorry, I couldn't find or process information for that query. Would you like to try asking something else?";
+  }
+};
+
+// Export a version that provides more detailed, structured results
+export const searchAndSummarizeDetailed = async (query: string): Promise<string> => {
+  try {
+    // Get more detailed search results
+    const content = await fetchDetailedSearchResults(query);
+    
+    if (content.length < 200 || content.includes('No search results found')) {
+      return content;
+    }
+    
+    await initSummarizer();
+    
+    // Allow more content for detailed version
+    const truncatedContent = content.slice(0, 1500);
+    
+    const result = await summarizer(truncatedContent, {
+      max_length: 150, // Longer summary for detailed version
+      min_length: 50,
+      do_sample: false
+    });
+    
+    return result[0].summary_text;
+  } catch (error) {
+    console.error('Error in detailed searchAndSummarize:', error);
+    return "I'm sorry, I couldn't find or process information for that query. Would you like to try asking something else?";
+  }
+};
+
+// Quick search function that returns raw results without summarization
+export const quickSearch = async (query: string): Promise<string> => {
+  try {
+    return await fetchSearchResults(query);
+  } catch (error) {
+    console.error('Error in quickSearch:', error);
+    return "Search failed. Please try again.";
   }
 };
