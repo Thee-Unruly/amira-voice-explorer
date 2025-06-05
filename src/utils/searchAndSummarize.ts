@@ -1,6 +1,3 @@
-
-import { pipeline, SummarizationOutput } from '@huggingface/transformers';
-
 // Configuration - Store API keys in environment variables for security
 const OPENROUTER_API_KEY = import.meta.env.VITE_OPENROUTER_API_KEY || '';
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
@@ -18,34 +15,6 @@ interface SearchResult {
   content: string;
   source?: string;
 }
-
-// Summarizer instance
-let summarizer: any = null;
-let summarizerInitialized = false;
-let summarizerFailed = false;
-
-// Initialize the summarizer with caching
-const initSummarizer = async (): Promise<any> => {
-  if (summarizerFailed) {
-    return null; // Don't try again if it already failed
-  }
-
-  if (!summarizer && !summarizerInitialized) {
-    summarizerInitialized = true;
-    try {
-      console.log('Attempting to load summarizer model...');
-      summarizer = await pipeline('summarization', 'Xenova/distilbart-cnn-6-6', {
-        cache_dir: './model-cache',
-      });
-      console.log('Summarizer model loaded successfully');
-    } catch (error) {
-      console.error('Failed to load summarizer model:', error);
-      summarizerFailed = true;
-      return null;
-    }
-  }
-  return summarizer;
-};
 
 // Utility to check if DeepSeek response lacks current information
 const isOutdatedResponse = (content: string): boolean => {
@@ -191,30 +160,49 @@ const fetchNewsResults = async (query: string): Promise<SearchResult> => {
   }
 };
 
-// Helper function to create a manual summary when AI summarizer fails
-const createManualSummary = (content: string, maxLength: number = 300): string => {
-  if (content.length <= maxLength) {
-    return content;
-  }
-  
-  // Split into sentences and take the first few that fit within the limit
-  const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 0);
-  let summary = '';
-  
-  for (const sentence of sentences) {
-    const nextLength = summary.length + sentence.length + 1;
-    if (nextLength > maxLength) {
-      break;
+// New function to summarize content using DeepSeek
+const summarizeWithDeepSeek = async (content: string, maxLength: number = 120, minLength: number = 40): Promise<string> => {
+  try {
+    if (!OPENROUTER_API_KEY) {
+      return 'OpenRouter API key is missing. Please configure it in environment variables.';
     }
-    summary += (summary ? '. ' : '') + sentence.trim();
+
+    const summaryPrompt = `Please summarize the following text into a concise paragraph of ${minLength} to ${maxLength} words. Focus on the key points, main ideas, and critical information. Avoid adding extra details or opinions not present in the text. Here is the text to summarize: "${content}"`;
+
+    const response = await fetch(OPENROUTER_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'deepseek/deepseek-r1',
+        messages: [
+          {
+            role: 'user',
+            content: summaryPrompt,
+          },
+        ],
+        max_tokens: 500, // Enough tokens for a summary of 120 words
+        temperature: 0.7,
+      }),
+    });
+
+    console.log('DeepSeek Summarization API Response Status:', response.status);
+
+    const data: OpenRouterResponse = await response.json();
+
+    if (!response.ok || !data.choices || data.choices.length === 0 || !data.choices[0].message.content) {
+      console.error('Summarization failed:', data);
+      return content.slice(0, maxLength) + '...'; // Fallback to truncation if summarization fails
+    }
+
+    console.log('Successfully summarized content with DeepSeek');
+    return data.choices[0].message.content.trim();
+  } catch (error) {
+    console.error('DeepSeek summarization failed:', error);
+    return content.slice(0, maxLength) + '...'; // Fallback to truncation
   }
-  
-  // Ensure it ends with proper punctuation
-  if (summary && !summary.match(/[.!?]$/)) {
-    summary += '.';
-  }
-  
-  return summary || content.substring(0, maxLength) + '...';
 };
 
 // Main function to search and summarize
@@ -236,29 +224,11 @@ export const searchAndSummarize = async (query: string): Promise<string> => {
       return result.content;
     }
 
-    // Try to initialize summarizer
-    const summarizerInstance = await initSummarizer();
+    // Summarize the content using DeepSeek
+    const truncatedContent = result.content.slice(0, 1500); // Truncate to avoid overwhelming the API
+    const summary = await summarizeWithDeepSeek(truncatedContent, 120, 40);
 
-    let finalText = '';
-
-    if (summarizerInstance) {
-      try {
-        const truncatedContent = result.content.slice(0, 1500);
-        const summary: SummarizationOutput = await summarizerInstance(truncatedContent, {
-          max_length: 120,
-          min_length: 40,
-          do_sample: false,
-        });
-        finalText = summary[0].summary_text;
-        console.log('Successfully generated AI summary');
-      } catch (error) {
-        console.error('Summarizer failed, using manual summary:', error);
-        finalText = createManualSummary(result.content, 300);
-      }
-    } else {
-      console.log('Summarizer not available, using manual summary');
-      finalText = createManualSummary(result.content, 300);
-    }
+    let finalText = summary;
 
     if (result.source) {
       finalText += `\n\nSource: ${result.source}`;
@@ -289,26 +259,11 @@ export const searchAndSummarizeDetailed = async (query: string): Promise<string>
       return result.content;
     }
 
-    const summarizerInstance = await initSummarizer();
+    // Summarize the content using DeepSeek with a longer summary
+    const truncatedContent = result.content.slice(0, 2000);
+    const summary = await summarizeWithDeepSeek(truncatedContent, 180, 60);
 
-    let finalText = '';
-
-    if (summarizerInstance) {
-      try {
-        const truncatedContent = result.content.slice(0, 2000);
-        const summary: SummarizationOutput = await summarizerInstance(truncatedContent, {
-          max_length: 180,
-          min_length: 60,
-          do_sample: false,
-        });
-        finalText = summary[0].summary_text;
-      } catch (error) {
-        console.error('Detailed summarizer failed, using manual summary:', error);
-        finalText = createManualSummary(result.content, 500);
-      }
-    } else {
-      finalText = createManualSummary(result.content, 500);
-    }
+    let finalText = summary;
 
     if (result.source) {
       finalText += `\n\nSource: ${result.source}`;
@@ -343,18 +298,18 @@ export const testApiConfiguration = async (): Promise<string> => {
 
     if (openRouterResponse.ok && openRouterData.choices && openRouterData.choices.length > 0) {
       results.push('✅ OpenRouter API configuration is working correctly!');
+      // Test summarization by sending a short text to summarize
+      const testText = "This is a test text for summarization. It contains multiple sentences to ensure the summarization works properly. Let's see if DeepSeek can summarize this effectively.";
+      const summary = await summarizeWithDeepSeek(testText, 30, 10);
+      if (!summary.includes('...')) {
+        results.push('✅ DeepSeek Summarization is working correctly!');
+      } else {
+        results.push('⚠️ DeepSeek Summarization failed, used fallback truncation.');
+      }
     } else if (openRouterData.error) {
       results.push(`❌ OpenRouter API Error: ${openRouterData.error.message} (Code: ${openRouterData.error.code || 'Unknown'})`);
     } else {
       results.push(`⚠️ OpenRouter API responded but no results found. Status: ${openRouterResponse.status}`);
-    }
-
-    // Test summarizer
-    const summarizerInstance = await initSummarizer();
-    if (summarizerInstance) {
-      results.push('✅ AI Summarizer is working correctly!');
-    } else {
-      results.push('⚠️ AI Summarizer failed to load, using fallback manual summarization.');
     }
 
     return results.join('\n');
