@@ -95,12 +95,12 @@ const Index: React.FC = () => {
   const isActive = isListening || isProcessing || isSpeaking;
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4 text-white">
+    <div className="min-h-screen flex flex-col items-center justify-center p-4 text-white bg-agile-teal">
       <div className="max-w-4xl w-full space-y-8">
         {/* Header */}
         <div className="text-center space-y-4">
-          <h1 className="text-6xl font-bold mb-2" style={{ color: '#167AA1' }}>AGILE</h1>
-          <p className="text-xl text-gray-300">AI Voice Assistant for Web Search</p>
+          <h1 className="text-6xl font-bold text-white mb-2">AGILE</h1>
+          <p className="text-xl text-gray-200">AI Voice Assistant for Web Search</p>
           <StatusIndicator status={status} isActive={isActive} />
         </div>
 
@@ -119,7 +119,7 @@ const Index: React.FC = () => {
               w-24 h-24 rounded-full transition-all duration-300 
               ${isListening 
                 ? 'bg-red-500 hover:bg-red-600 voice-pulse' 
-                : 'bg-[#167AA1] hover:bg-[#1E95C3]'
+                : 'bg-white text-agile-teal hover:bg-gray-100'
               }
               ${isActive ? 'scale-110' : 'scale-100'}
               shadow-lg hover:shadow-xl
@@ -135,20 +135,20 @@ const Index: React.FC = () => {
 
         {/* Query Display */}
         {query && (
-          <Card className="p-6 bg-white/10 backdrop-blur border-white/20">
+          <Card className="p-6 bg-white/20 backdrop-blur border-white/30">
             <div className="flex items-center gap-3 mb-3">
-              <Search className="w-5 h-5" style={{ color: '#167AA1' }} />
+              <Search className="w-5 h-5 text-white" />
               <h3 className="text-lg font-semibold text-white">Your Query</h3>
             </div>
-            <p className="text-gray-200">{query}</p>
+            <p className="text-gray-100">{query}</p>
           </Card>
         )}
 
         {/* Processing Indicator */}
         {isProcessing && (
-          <Card className="p-6 bg-white/10 backdrop-blur border-white/20">
+          <Card className="p-6 bg-white/20 backdrop-blur border-white/30">
             <div className="flex items-center gap-3">
-              <Brain className="w-5 h-5 animate-pulse" style={{ color: '#167AA1' }} />
+              <Brain className="w-5 h-5 text-white animate-pulse" />
               <span className="text-white">Processing with AI...</span>
             </div>
           </Card>
