@@ -1,9 +1,13 @@
 import { pipeline, SummarizationOutput } from '@huggingface/transformers';
+import dotenv from 'dotenv';
+
+// Load environment variables from .env file
+dotenv.config();
 
 // Configuration - Store API keys in environment variables for security
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const NEWS_API_KEY = 'a004c99087c44b7db67f400ef0affe9d'; // Provided NewsAPI key
+const NEWS_API_KEY = process.env.NEWS_API_KEY || '';
 const NEWS_API_URL = 'https://newsapi.org/v2/everything';
 
 // Interface for OpenRouter API response
@@ -51,19 +55,27 @@ const initSummarizer = async (): Promise<any> => {
   return summarizer;
 };
 
-// Function to check if DeepSeek response indicates lack of current information
+// Utility to check if DeepSeek response lacks current information
 const isOutdatedResponse = (content: string): boolean => {
   const lowerContent = content.toLowerCase();
   return (
     lowerContent.includes('no recent information') ||
     lowerContent.includes('outdated') ||
     lowerContent.includes('no results found') ||
-    lowerContent.includes('i don\'t have access to real-time') ||
+    lowerContent.includes("i don't have access to real-time") ||
+    lowerContent.includes('try using different keywords') ||
     lowerContent.length < 200 // Short responses may indicate lack of info
   );
 };
 
-// Main function to fetch content using OpenRouter DeepSeek R1
+// Utility to simplify query for NewsAPI (e.g., remove question phrasing)
+const simplifyQueryForNewsApi = (query: string): string => {
+  return query
+    .replace(/^(what are the recent news about|latest news on|news about)\s+/i, '')
+    .trim();
+};
+
+// Fetch content using OpenRouter DeepSeek R1
 const fetchDeepSeekResults = async (query: string): Promise<SearchResult> => {
   try {
     const cleanQuery = query.trim();
@@ -82,7 +94,7 @@ const fetchDeepSeekResults = async (query: string): Promise<SearchResult> => {
         Authorization: `Bearer ${OPENROUTER_API_KEY}`,
       },
       body: JSON.stringify({
-        model: 'deepseek/deepseek-r1:free',
+        model: 'deepseek/r1', // Consistent model name
         messages: [
           {
             role: 'user',
@@ -94,7 +106,7 @@ const fetchDeepSeekResults = async (query: string): Promise<SearchResult> => {
       }),
     });
 
-    console.log('OpenRouter API Response Status:', response.status); // Debug log
+    console.log('OpenRouter API Response Status:', response.status);
 
     const data: OpenRouterResponse = await response.json();
 
@@ -121,7 +133,7 @@ const fetchDeepSeekResults = async (query: string): Promise<SearchResult> => {
       return { content: `No results found for "${cleanQuery}". Try using different keywords.` };
     }
 
-    console.log(`Received DeepSeek response for "${cleanQuery}"`); // Debug log
+    console.log(`Received DeepSeek response for "${cleanQuery}"`);
     return { content: data.choices[0].message.content };
   } catch (error) {
     console.error('OpenRouter API failed:', error);
@@ -132,7 +144,7 @@ const fetchDeepSeekResults = async (query: string): Promise<SearchResult> => {
   }
 };
 
-// Function to fetch real-time news using NewsAPI
+// Fetch real-time news using NewsAPI
 const fetchNewsApiResults = async (query: string): Promise<SearchResult> => {
   try {
     const cleanQuery = query.trim();
@@ -140,23 +152,28 @@ const fetchNewsApiResults = async (query: string): Promise<SearchResult> => {
       return { content: 'Please provide a search query.' };
     }
 
-    const newsUrl = `${NEWS_API_URL}?q=${encodeURIComponent(cleanQuery)}&apiKey=${NEWS_API_KEY}&sortBy=publishedAt&pageSize=5`;
+    if (!NEWS_API_KEY) {
+      return { content: 'NewsAPI key is missing. Please configure it in environment variables.' };
+    }
 
-    console.log('NewsAPI URL:', newsUrl); // Debug log
-    console.log('Searching NewsAPI for:', cleanQuery); // Debug log
+    // Simplify query for better NewsAPI results
+    const simplifiedQuery = simplifyQueryForNewsApi(cleanQuery);
+    const newsUrl = `${NEWS_API_URL}?q=${encodeURIComponent(simplifiedQuery)}&apiKey=${NEWS_API_KEY}&sortBy=publishedAt&pageSize=5`;
+
+    console.log('NewsAPI URL:', newsUrl);
+    console.log('Searching NewsAPI for:', simplifiedQuery);
 
     const response = await fetch(newsUrl);
     const data: NewsApiResponse = await response.json();
 
-    console.log('NewsAPI Response:', data); // Debug log
+    console.log('NewsAPI Response:', data);
 
     if (data.status !== 'ok' || !data.articles || data.articles.length === 0) {
-      return { content: `No recent news found for "${cleanQuery}". Try using different keywords.` };
+      return { content: `No recent news found for "${simplifiedQuery}". Try using different keywords.` };
     }
 
-    console.log(`Found ${data.articles.length} news articles`); // Debug log
+    console.log(`Found ${data.articles.length} news articles`);
 
-    // Combine article content for summarization
     const combinedContent = data.articles
       .map((article, index) => {
         const title = article.title || '';
@@ -180,27 +197,21 @@ const fetchNewsApiResults = async (query: string): Promise<SearchResult> => {
 // Main function to search and summarize
 export const searchAndSummarize = async (query: string): Promise<string> => {
   try {
-    // First, try DeepSeek R1
     let result = await fetchDeepSeekResults(query);
 
-    // Check if DeepSeek response indicates lack of current information
     if (isOutdatedResponse(result.content)) {
-      console.log('DeepSeek response outdated or insufficient, falling back to NewsAPI'); // Debug log
+      console.log('DeepSeek response outdated or insufficient, falling back to NewsAPI');
       result = await fetchNewsApiResults(query);
     }
 
-    // If no results or insufficient content, return early
     if (result.content.length < 200 || result.content.includes('No results found') || result.content.includes('No recent news found')) {
       return result.content;
     }
 
-    // Initialize the summarizer
     await initSummarizer();
 
-    // Truncate content if it's too long for the model (BART has token limits)
     const truncatedContent = result.content.slice(0, 1000);
 
-    // Summarize the content
     const summary: SummarizationOutput = await summarizer(truncatedContent, {
       max_length: 100,
       min_length: 30,
@@ -219,7 +230,7 @@ export const searchAndSummarize = async (query: string): Promise<string> => {
   }
 };
 
-// Alternative function for detailed results
+// Fetch detailed results using DeepSeek R1
 const fetchDetailedDeepSeekResults = async (query: string): Promise<SearchResult> => {
   try {
     const response = await fetch(OPENROUTER_API_URL, {
@@ -229,7 +240,7 @@ const fetchDetailedDeepSeekResults = async (query: string): Promise<SearchResult
         Authorization: `Bearer ${OPENROUTER_API_KEY}`,
       },
       body: JSON.stringify({
-        model: 'deepseek/r1',
+        model: 'deepseek/r1', // Consistent model name
         messages: [
           {
             role: 'user',
@@ -254,15 +265,13 @@ const fetchDetailedDeepSeekResults = async (query: string): Promise<SearchResult
   }
 };
 
-// Export a version that provides more detailed, structured results
+// Detailed search and summarize
 export const searchAndSummarizeDetailed = async (query: string): Promise<string> => {
   try {
-    // First, try DeepSeek R1 for detailed results
     let result = await fetchDetailedDeepSeekResults(query);
 
-    // Check if DeepSeek response indicates lack of current information
     if (isOutdatedResponse(result.content)) {
-      console.log('DeepSeek detailed response outdated or insufficient, falling back to NewsAPI'); // Debug log
+      console.log('DeepSeek detailed response outdated or insufficient, falling back to NewsAPI');
       result = await fetchNewsApiResults(query);
     }
 
@@ -295,7 +304,6 @@ export const searchAndSummarizeDetailed = async (query: string): Promise<string>
 // Debug function to test API configurations
 export const testApiConfiguration = async (): Promise<string> => {
   try {
-    // Test OpenRouter API
     const testQuery = 'test';
     const openRouterResponse = await fetch(OPENROUTER_API_URL, {
       method: 'POST',
@@ -312,7 +320,6 @@ export const testApiConfiguration = async (): Promise<string> => {
 
     const openRouterData: OpenRouterResponse = await openRouterResponse.json();
 
-    // Test NewsAPI
     const newsUrl = `${NEWS_API_URL}?q=test&apiKey=${NEWS_API_KEY}&pageSize=1`;
     const newsResponse = await fetch(newsUrl);
     const newsData: NewsApiResponse = await newsResponse.json();
@@ -341,12 +348,12 @@ export const testApiConfiguration = async (): Promise<string> => {
   }
 };
 
-// Quick search function that returns raw results without summarization
+// Quick search without summarization
 export const quickSearch = async (query: string): Promise<string> => {
   try {
     const result = await fetchDeepSeekResults(query);
-    if (isOutdatedResponse(result)) {
-      console.log('DeepSeek quick search response outdated, falling back to NewsAPI'); // Debug log
+    if (isOutdatedResponse(result.content)) {
+      console.log('DeepSeek quick search response outdated, falling back to NewsAPI');
       return (await fetchNewsApiResults(query)).content;
     }
     return result.content;
