@@ -248,15 +248,15 @@ export const testApiConfiguration = async (): Promise<string> => {
     });
     const openRouterData: OpenRouterResponse = await openRouterResponse.json();
     if (openRouterResponse.ok && openRouterData.choices?.length) {
-      results.push('✅ OpenRouter API configuration is working correctly!');
+      results.push('OpenRouter API configuration is working correctly!');
       const testText = "This is a test text for summarization.";
       const summary = await summarizeWithDeepSeek(testText, 30, 10);
-      results.push(summary.includes('...') ? '⚠️ DeepSeek Summarization failed' : '✅ DeepSeek Summarization is working correctly!');
+      results.push(summary.includes('...') ? 'DeepSeek Summarization failed' : 'DeepSeek Summarization is working correctly!');
     } else {
-      results.push(`❌ OpenRouter API Error: ${openRouterData.error?.message || 'Unknown'}`);
+      results.push(`OpenRouter API Error: ${openRouterData.error?.message || 'Unknown'}`);
     }
   } catch (error) {
-    results.push(`❌ OpenRouter Connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    results.push(`OpenRouter Connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 
   // Test Firecrawl API
@@ -274,12 +274,12 @@ export const testApiConfiguration = async (): Promise<string> => {
     });
     const firecrawlData: FirecrawlResponse = await firecrawlResponse.json();
     if (firecrawlResponse.ok && firecrawlData.success && firecrawlData.data?.length) {
-      results.push('✅ Firecrawl API configuration is working correctly!');
+      results.push('Firecrawl API configuration is working correctly!');
     } else {
-      results.push(`❌ Firecrawl API Error: ${firecrawlData.error || 'Unknown'}`);
+      results.push(`Firecrawl API Error: ${firecrawlData.error || 'Unknown'}`);
     }
   } catch (error) {
-    results.push(`❌ Firecrawl Connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    results.push(`Firecrawl Connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 
   return results.join('\n');
