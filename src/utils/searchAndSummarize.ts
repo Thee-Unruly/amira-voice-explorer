@@ -15,7 +15,12 @@ interface OpenRouterResponse {
 // Interface for Firecrawl API response
 interface FirecrawlResponse {
   success: boolean;
-  data?: Array<{ content: string; url: string }>;
+  data?: Array<{ 
+    content: string; 
+    url: string; 
+    title?: string;
+    description?: string;
+  }>;
   error?: string;
 }
 
@@ -23,7 +28,21 @@ interface FirecrawlResponse {
 interface SearchResult {
   content: string;
   source?: string;
+  urls?: string[];
+  isRealTime?: boolean;
 }
+
+// Enhanced utility to detect queries that need real-time information
+const needsRealTimeInfo = (query: string): boolean => {
+  const lowerQuery = query.toLowerCase();
+  const realTimeKeywords = [
+    'today', 'now', 'current', 'latest', 'recent', 'breaking', 'news',
+    'stock price', 'weather', 'live', 'happening', 'trending', 'update',
+    '2024', '2025', 'this week', 'this month', 'this year'
+  ];
+  
+  return realTimeKeywords.some(keyword => lowerQuery.includes(keyword));
+};
 
 // Utility to check if response lacks current information
 const isOutdatedResponse = (content: string): boolean => {
@@ -36,79 +55,11 @@ const isOutdatedResponse = (content: string): boolean => {
     lowerContent.includes('try using different keywords') ||
     lowerContent.includes('my knowledge cutoff') ||
     lowerContent.includes('as of my last update') ||
-    lowerContent.length < 150
+    lowerContent.length < 100
   );
 };
 
-// Fetch content using OpenRouter DeepSeek
-const fetchDeepSeekResults = async (query: string): Promise<SearchResult> => {
-  try {
-    const cleanQuery = query.trim();
-    if (!cleanQuery) {
-      return { content: 'Please provide a search query.' };
-    }
-
-    if (!OPENROUTER_API_KEY) {
-      return { content: 'OpenRouter API key is missing. Please configure it in environment variables.' };
-    }
-
-    const enhancedPrompt = `Please provide a detailed and informative response about: "${cleanQuery}". 
-    Include relevant facts, recent developments if known, and context. 
-    If this involves current events or recent news, provide the most up-to-date information available to you.
-    Make your response comprehensive and informative, at least 100 words.`;
-
-    const response = await fetch(OPENROUTER_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'deepseek/deepseek-chat:free',
-        messages: [{ role: 'user', content: enhancedPrompt }],
-        max_tokens: 1500,
-        temperature: 0.7,
-      }),
-    });
-
-    console.log('OpenRouter API Response Status:', response.status);
-
-    const data: OpenRouterResponse = await response.json();
-
-    if (!response.ok) {
-      console.error('API Error Response:', data);
-      if (data.error) {
-        const errorMessage = data.error.message || 'Unknown API error';
-        const errorCode = data.error.code || response.status;
-        switch (errorCode) {
-          case 400:
-            return { content: `Query error: ${errorMessage}. Please try a different search term.` };
-          case 403:
-            return { content: 'API key invalid or access denied. Please check your OpenRouter API key.' };
-          case 429:
-            return { content: 'Too many requests. Please wait a moment and try again.' };
-          default:
-            return { content: `OpenRouter API error (${errorCode}): ${errorMessage}` };
-        }
-      }
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-
-    if (!data.choices || data.choices.length === 0 || !data.choices[0].message.content) {
-      console.log('No results from DeepSeek');
-      return { content: `No results found for "${cleanQuery}" using DeepSeek.`, source: 'DeepSeek' };
-    }
-
-    const content = data.choices[0].message.content;
-    console.log(`Received DeepSeek response for "${cleanQuery}"`);
-    return { content, source: 'DeepSeek' };
-  } catch (error) {
-    console.error('OpenRouter API failed:', error);
-    return { content: `DeepSeek search failed: ${error instanceof Error ? error.message : 'Unknown error'}.`, source: 'DeepSeek' };
-  }
-};
-
-// Fetch content using Firecrawl Search API
+// Enhanced Firecrawl search with better result processing
 const fetchFirecrawlResults = async (query: string): Promise<SearchResult> => {
   try {
     const cleanQuery = query.trim();
@@ -120,6 +71,8 @@ const fetchFirecrawlResults = async (query: string): Promise<SearchResult> => {
       return { content: 'Firecrawl API key is missing. Please configure it in environment variables.' };
     }
 
+    console.log('Searching with Firecrawl for real-time data:', cleanQuery);
+
     const response = await fetch(FIRECRAWL_API_URL, {
       method: 'POST',
       headers: {
@@ -128,7 +81,15 @@ const fetchFirecrawlResults = async (query: string): Promise<SearchResult> => {
       },
       body: JSON.stringify({
         query: cleanQuery,
-        scrapeOptions: { formats: ['markdown'] },
+        pageOptions: {
+          onlyMainContent: true
+        },
+        scrapeOptions: { 
+          formats: ['markdown', 'html'],
+          onlyMainContent: true,
+          excludeTags: ['nav', 'footer', 'aside', 'script', 'style']
+        },
+        limit: 5 // Get more results for better coverage
       }),
     });
 
@@ -137,31 +98,127 @@ const fetchFirecrawlResults = async (query: string): Promise<SearchResult> => {
     const data: FirecrawlResponse = await response.json();
 
     if (!response.ok || !data.success || !data.data || data.data.length === 0) {
-      return { content: `No results found for "${cleanQuery}" using Firecrawl. Try different keywords.`, source: 'Firecrawl' };
+      console.log('No Firecrawl results found');
+      return { 
+        content: `No real-time results found for "${cleanQuery}". The information may not be available or the query might need refinement.`, 
+        source: 'Firecrawl',
+        isRealTime: true
+      };
     }
 
-    // Combine content from top results
-    const combinedContent = data.data
-      .slice(0, 3)
-      .map((item) => `Source: ${item.url}\n${item.content}`)
-      .join('\n\n');
+    // Process and combine the best results
+    const processedResults = data.data
+      .filter(item => item.content && item.content.length > 50) // Filter out very short content
+      .slice(0, 3) // Take top 3 results
+      .map((item, index) => {
+        const title = item.title ? `**${item.title}**\n` : '';
+        const url = `Source: ${item.url}\n`;
+        const content = item.content.slice(0, 800); // Limit each result length
+        return `${index + 1}. ${title}${url}${content}`;
+      });
 
-    console.log(`Received Firecrawl response for "${cleanQuery}"`);
-    return { content: combinedContent, source: 'Firecrawl' };
+    if (processedResults.length === 0) {
+      return { 
+        content: `No substantial content found for "${cleanQuery}". Try using more specific search terms.`, 
+        source: 'Firecrawl',
+        isRealTime: true
+      };
+    }
+
+    const combinedContent = processedResults.join('\n\n---\n\n');
+    const urls = data.data.map(item => item.url);
+
+    console.log(`Successfully retrieved ${processedResults.length} real-time results from Firecrawl`);
+    
+    return { 
+      content: combinedContent, 
+      source: 'Firecrawl',
+      urls: urls,
+      isRealTime: true
+    };
+
   } catch (error) {
     console.error('Firecrawl API failed:', error);
-    return { content: `Firecrawl search failed: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`, source: 'Firecrawl' };
+    return { 
+      content: `Real-time search failed: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again with different keywords.`, 
+      source: 'Firecrawl',
+      isRealTime: true
+    };
   }
 };
 
-// Summarize content using DeepSeek
-const summarizeWithDeepSeek = async (content: string, maxLength: number = 120, minLength: number = 40): Promise<string> => {
+// Fallback DeepSeek search (for when Firecrawl fails or for general knowledge)
+const fetchDeepSeekResults = async (query: string): Promise<SearchResult> => {
   try {
-    if (!OPENROUTER_API_KEY) {
-      return 'OpenRouter API key is missing. Please configure it in environment variables.';
+    const cleanQuery = query.trim();
+    if (!cleanQuery) {
+      return { content: 'Please provide a search query.' };
     }
 
-    const summaryPrompt = `Please summarize the following text into a concise paragraph of ${minLength} to ${maxLength} words. Focus on the key points, main ideas, and critical information. Avoid adding extra details or opinions not present in the text. Here is the text to summarize: "${content}"`;
+    if (!OPENROUTER_API_KEY) {
+      return { content: 'OpenRouter API key is missing. Please configure it in environment variables.' };
+    }
+
+    const enhancedPrompt = `Please provide a comprehensive and informative response about: "${cleanQuery}". 
+    Include relevant facts, context, and any available information. 
+    If this involves recent events, acknowledge any limitations in real-time data access.
+    Make your response detailed and informative, at least 150 words.`;
+
+    const response = await fetch(OPENROUTER_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'deepseek/deepseek-chat:free',
+        messages: [{ role: 'user', content: enhancedPrompt }],
+        max_tokens: 1000,
+        temperature: 0.7,
+      }),
+    });
+
+    const data: OpenRouterResponse = await response.json();
+
+    if (!response.ok || !data.choices || data.choices.length === 0 || !data.choices[0].message.content) {
+      return { content: `No results available from DeepSeek for "${cleanQuery}".`, source: 'DeepSeek' };
+    }
+
+    const content = data.choices[0].message.content;
+    console.log('Retrieved DeepSeek fallback response');
+    return { content, source: 'DeepSeek', isRealTime: false };
+
+  } catch (error) {
+    console.error('DeepSeek search failed:', error);
+    return { 
+      content: `Search failed: ${error instanceof Error ? error.message : 'Unknown error'}.`, 
+      source: 'DeepSeek',
+      isRealTime: false
+    };
+  }
+};
+
+// Enhanced summarization with better prompts for real-time content
+const summarizeWithDeepSeek = async (
+  content: string, 
+  isRealTime: boolean = false,
+  maxLength: number = 150, 
+  minLength: number = 50
+): Promise<string> => {
+  try {
+    if (!OPENROUTER_API_KEY) {
+      return 'OpenRouter API key is missing for summarization.';
+    }
+
+    const contentType = isRealTime ? 'real-time search results' : 'information';
+    const summaryPrompt = `Please create a clear and concise summary of the following ${contentType}. 
+    The summary should be between ${minLength} and ${maxLength} words.
+    Focus on the most important facts, key points, and actionable information.
+    ${isRealTime ? 'Pay special attention to dates, current status, and recent developments.' : ''}
+    Maintain accuracy and avoid adding information not present in the original text.
+    
+    Content to summarize:
+    ${content}`;
 
     const response = await fetch(OPENROUTER_API_URL, {
       method: 'POST',
@@ -172,74 +229,115 @@ const summarizeWithDeepSeek = async (content: string, maxLength: number = 120, m
       body: JSON.stringify({
         model: 'deepseek/deepseek-r1',
         messages: [{ role: 'user', content: summaryPrompt }],
-        max_tokens: 500,
-        temperature: 0.7,
+        max_tokens: Math.ceil(maxLength * 1.5), // Allow some buffer for the response
+        temperature: 0.3, // Lower temperature for more focused summaries
       }),
     });
-
-    console.log('DeepSeek Summarization API Response Status:', response.status);
 
     const data: OpenRouterResponse = await response.json();
 
     if (!response.ok || !data.choices || data.choices.length === 0 || !data.choices[0].message.content) {
-      console.error('Summarization failed:', data);
+      console.error('Summarization failed, using truncation');
       return content.slice(0, maxLength) + '...';
     }
 
+    const summary = data.choices[0].message.content.trim();
     console.log('Successfully summarized content with DeepSeek');
-    return data.choices[0].message.content.trim();
+    return summary;
+
   } catch (error) {
     console.error('DeepSeek summarization failed:', error);
     return content.slice(0, maxLength) + '...';
   }
 };
 
-// Main search and summarize function
-export const searchAndSummarize = async (query: string, preferFirecrawl: boolean = false): Promise<string> => {
+// Main search function - prioritizes real-time data
+export const searchAndSummarize = async (
+  query: string, 
+  forceRealTime: boolean = false
+): Promise<string> => {
   try {
     console.log('Starting search for:', query);
 
+    const requiresRealTime = forceRealTime || needsRealTimeInfo(query);
+    
     let result: SearchResult;
 
-    // Decide whether to prioritize Firecrawl or DeepSeek
-    if (preferFirecrawl) {
-      console.log('Prioritizing Firecrawl for real-time data');
+    if (requiresRealTime) {
+      console.log('Query requires real-time information - using Firecrawl');
       result = await fetchFirecrawlResults(query);
+      
+      // If Firecrawl fails completely, fall back to DeepSeek but inform user
+      if (result.content.includes('Real-time search failed') || result.content.includes('No real-time results')) {
+        console.log('Firecrawl failed, falling back to DeepSeek with disclaimer');
+        const fallbackResult = await fetchDeepSeekResults(query);
+        fallbackResult.content = `⚠️ Real-time search unavailable. Here's general information:\n\n${fallbackResult.content}`;
+        result = fallbackResult;
+      }
     } else {
+      console.log('General query - trying DeepSeek first');
       result = await fetchDeepSeekResults(query);
-      // Check if DeepSeek response is outdated
+      
+      // If DeepSeek response seems insufficient, try Firecrawl for more current info
       if (isOutdatedResponse(result.content)) {
-        console.log('DeepSeek response insufficient, falling back to Firecrawl');
-        result = await fetchFirecrawlResults(query);
+        console.log('DeepSeek response insufficient, trying Firecrawl for current information');
+        const firecrawlResult = await fetchFirecrawlResults(query);
+        if (!firecrawlResult.content.includes('No real-time results')) {
+          result = firecrawlResult;
+        }
       }
     }
 
-    // If no useful results, return as-is
-    if (result.content.length < 150 || result.content.includes('No results found')) {
+    // If content is too short or indicates failure, return as-is
+    if (result.content.length < 100 || 
+        result.content.includes('No results') || 
+        result.content.includes('failed')) {
       return result.content;
     }
 
-    // Summarize the content using DeepSeek
-    const truncatedContent = result.content.slice(0, 1500);
-    const summary = await summarizeWithDeepSeek(truncatedContent, 120, 40);
+    // Summarize the content
+    const contentToSummarize = result.content.slice(0, 2000); // Limit input length
+    const summary = await summarizeWithDeepSeek(
+      contentToSummarize, 
+      result.isRealTime || requiresRealTime,
+      requiresRealTime ? 200 : 150, // Longer summaries for real-time queries
+      requiresRealTime ? 80 : 50
+    );
 
-    let finalText = summary;
+    // Format final response
+    let finalResponse = summary;
+    
+    if (result.isRealTime) {
+      finalResponse = `🔍 **Real-time Search Results:**\n\n${summary}`;
+    }
+    
     if (result.source) {
-      finalText += `\n\nSource: ${result.source}`;
+      finalResponse += `\n\n*Source: ${result.source}*`;
+    }
+    
+    if (result.urls && result.urls.length > 0) {
+      finalResponse += `\n\n*Key Sources:*\n${result.urls.slice(0, 3).map(url => `• ${url}`).join('\n')}`;
     }
 
-    return finalText;
+    return finalResponse;
+
   } catch (error) {
     console.error('Error in searchAndSummarize:', error);
-    return "I'm sorry, I couldn't find or process information for that query. Would you like to try asking something else?";
+    return `I encountered an error while searching for information about "${query}". Please try again with different keywords or check your API configuration.`;
   }
 };
 
-// Test API configuration
+// Specific function for real-time searches
+export const searchRealTime = async (query: string): Promise<string> => {
+  return searchAndSummarize(query, true);
+};
+
+// Test API configuration with enhanced checks
 export const testApiConfiguration = async (): Promise<string> => {
   const results = [];
 
-  // Test OpenRouter API
+  // Test OpenRouter API (DeepSeek)
+  console.log('Testing OpenRouter API...');
   try {
     const openRouterResponse = await fetch(OPENROUTER_API_URL, {
       method: 'POST',
@@ -248,25 +346,37 @@ export const testApiConfiguration = async (): Promise<string> => {
         Authorization: `Bearer ${OPENROUTER_API_KEY}`,
       },
       body: JSON.stringify({
-        model: 'deepseek/deepseek-r1',
-        messages: [{ role: 'user', content: 'Test query' }],
+        model: 'deepseek/deepseek-chat:free',
+        messages: [{ role: 'user', content: 'Hello, this is a test. Please respond briefly.' }],
         max_tokens: 50,
       }),
     });
+    
     const openRouterData: OpenRouterResponse = await openRouterResponse.json();
+    
     if (openRouterResponse.ok && openRouterData.choices?.length) {
-      results.push('OpenRouter API configuration is working correctly!');
-      const testText = "This is a test text for summarization.";
-      const summary = await summarizeWithDeepSeek(testText, 30, 10);
-      results.push(summary.includes('...') ? 'DeepSeek Summarization failed' : 'DeepSeek Summarization is working correctly!');
+      results.push('✅ OpenRouter API (DeepSeek) is working correctly!');
+      
+      // Test summarization capability
+      const testSummary = await summarizeWithDeepSeek(
+        "This is a longer test text that should be summarized into a shorter version while maintaining the key information and meaning.", 
+        false, 30, 10
+      );
+      
+      if (testSummary.length > 0 && !testSummary.includes('...')) {
+        results.push('✅ DeepSeek Summarization is working correctly!');
+      } else {
+        results.push('⚠️ DeepSeek Summarization may have issues');
+      }
     } else {
-      results.push(`OpenRouter API Error: ${openRouterData.error?.message || 'Unknown'}`);
+      results.push(`❌ OpenRouter API Error: ${openRouterData.error?.message || 'Unknown error'}`);
     }
   } catch (error) {
-    results.push(`OpenRouter Connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    results.push(`❌ OpenRouter Connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 
   // Test Firecrawl API
+  console.log('Testing Firecrawl API...');
   try {
     const firecrawlResponse = await fetch(FIRECRAWL_API_URL, {
       method: 'POST',
@@ -275,18 +385,35 @@ export const testApiConfiguration = async (): Promise<string> => {
         Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
       },
       body: JSON.stringify({
-        query: 'test query',
+        query: 'latest technology news',
+        limit: 2,
         scrapeOptions: { formats: ['markdown'] },
       }),
     });
+    
     const firecrawlData: FirecrawlResponse = await firecrawlResponse.json();
+    
     if (firecrawlResponse.ok && firecrawlData.success && firecrawlData.data?.length) {
-      results.push('Firecrawl API configuration is working correctly!');
+      results.push('✅ Firecrawl API is working correctly!');
+      results.push(`   Retrieved ${firecrawlData.data.length} search results`);
     } else {
-      results.push(`Firecrawl API Error: ${firecrawlData.error || 'Unknown'}`);
+      results.push(`❌ Firecrawl API Error: ${firecrawlData.error || 'No results returned'}`);
     }
   } catch (error) {
-    results.push(`Firecrawl Connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    results.push(`❌ Firecrawl Connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+
+  // Test combined functionality
+  console.log('Testing combined search and summarization...');
+  try {
+    const testResult = await searchRealTime('current weather');
+    if (testResult.length > 50 && !testResult.includes('failed')) {
+      results.push('✅ Combined real-time search and summarization working!');
+    } else {
+      results.push('⚠️ Combined functionality may have issues');
+    }
+  } catch (error) {
+    results.push('⚠️ Combined functionality test failed');
   }
 
   return results.join('\n');
