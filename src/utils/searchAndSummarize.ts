@@ -1,7 +1,7 @@
 // Configuration - Store API keys in environment variables for security
 const OPENROUTER_API_KEY = import.meta.env.VITE_OPENROUTER_API_KEY || '';
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const FIRECRAWL_API_KEY = import.meta.env.VITE_FIRECRAWL_API_KEY || '';
+const FIRECRAWL_API_KEY = import.meta.env.VITE_FIRECRAWL_API_KEY || 'fc-c130afde18b24000aba32a56288c42be'; // Temporary - move to .env file
 const FIRECRAWL_API_URL = 'https://api.firecrawl.dev/v1/search';
 
 // Interface for OpenRouter API response
