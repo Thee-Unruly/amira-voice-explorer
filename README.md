@@ -1,86 +1,73 @@
-# Search and Summarize with Firecrawl and DeepSeek
+# Welcome to your Lovable project
 
-This project provides a TypeScript-based tool to search for real-time information using the Firecrawl API and summarize the results using the DeepSeek model via OpenRouter. It combines web scraping for up-to-date data with AI-powered summarization to deliver concise, informative responses for user queries.
+## Project info
 
-## Features
+**URL**: https://lovable.dev/projects/e3a24c02-eb47-45c4-8484-83199c335c1c
 
-- **Real-Time Data Retrieval**: Uses Firecrawl's search API to fetch and scrape recent web content when DeepSeek lacks current information.
-- **AI-Powered Summarization**: Summarizes content into 40–120 word paragraphs using DeepSeek, ensuring key points are captured.
-- **Fallback Mechanism**: Tries DeepSeek first, then falls back to Firecrawl if the response is outdated or insufficient.
-- **Source Attribution**: Indicates whether results come from DeepSeek or Firecrawl.
-- **Error Handling**: Robust handling for API failures, invalid keys, and network issues.
-- **Testing Utility**: Includes a function to verify API configurations.
+## How can I edit this code?
 
-## Prerequisites
+There are several ways of editing your application.
 
-- **Node.js**: Version 18 or higher.
-- **API Keys**:
-  - Firecrawl API key ([sign up](https://www.firecrawl.dev/)).
-  - OpenRouter API key ([sign up](https://openrouter.ai/)).
-- **Environment Variables**: Store API keys in a `.env` file.
+**Use Lovable**
 
+Simply visit the [Lovable Project](https://lovable.dev/projects/e3a24c02-eb47-45c4-8484-83199c335c1c) and start prompting.
 
-## ⚙️ How It Works
+Changes made via Lovable will be committed automatically to this repo.
 
-1. **Query Processing**  
-   `searchAndSummarize(query)` accepts a user query (e.g., `"recent developments in AI 2025"`).  
-   It first tries to fetch a response using **DeepSeek** via **OpenRouter**.
+**Use your preferred IDE**
 
-2. **Fallback to Firecrawl**  
-   If DeepSeek’s response is outdated or fails, the code falls back to **Firecrawl**’s real-time web search and scraping API, which returns markdown-formatted content from up to three top sources.
+If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
 
-3. **Summarization**  
-   - Retrieved content is truncated to **1500 characters** to respect API limits.  
-   - DeepSeek condenses the content into a **40–120-word** paragraph.
+The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
 
-4. **Output**  
-   The final result is a concise summary with source attribution (e.g., `Source: Firecrawl`).
+Follow these steps:
 
----
+```sh
+# Step 1: Clone the repository using the project's Git URL.
+git clone <YOUR_GIT_URL>
 
-## 🌐 API Details
+# Step 2: Navigate to the project directory.
+cd <YOUR_PROJECT_NAME>
 
-### 🔥 Firecrawl
-- **Endpoint:** `https://api.firecrawl.dev/v1/search`  
-- Real-time web search and scraping.  
-- Returns markdown-formatted content from top search results.
+# Step 3: Install the necessary dependencies.
+npm i
 
-### 🤖 OpenRouter (DeepSeek)
-- **Endpoint:** `https://openrouter.ai/api/v1/chat/completions`  
-- **Models:** `deepseek/deepseek-chat:free`, `deepseek/deepseek-r1`  
-- Used for initial query handling and summarization.
+# Step 4: Start the development server with auto-reloading and an instant preview.
+npm run dev
+```
 
----
+**Edit a file directly in GitHub**
 
-### 🛡️ Error Handling
+- Navigate to the desired file(s).
+- Click the "Edit" button (pencil icon) at the top right of the file view.
+- Make your changes and commit the changes.
 
-The code gracefully manages:
+**Use GitHub Codespaces**
 
-- ❌ Missing or invalid API keys  
-- ⚠️ API rate limits (`HTTP 429`)  
-- 🌐 Network errors or failed requests  
-- 🔁 Insufficient or outdated responses (triggers Firecrawl fallback)
+- Navigate to the main page of your repository.
+- Click on the "Code" button (green button) near the top right.
+- Select the "Codespaces" tab.
+- Click on "New codespace" to launch a new Codespace environment.
+- Edit files directly within the Codespace and commit and push your changes once you're done.
 
----
+## What technologies are used for this project?
 
-### ⚠️ Limitations
-- **API Quotas:** Firecrawl and OpenRouter enforce usage limits  
-- **Content Length:** Input is truncated to **1500 characters** to comply with summarization limits  
-- **Web Data Dependency:** Firecrawl’s effectiveness depends on the **availability and quality** of web content
+This project is built with:
 
----
+- Vite
+- TypeScript
+- React
+- shadcn-ui
+- Tailwind CSS
 
-### Potential Improvements
+## How can I deploy this project?
 
-- **Caching:** Store recent query results to reduce redundant API calls  
-- **Custom Models:** Add support for other LLMs (e.g., Claude, GPT-4o)  
-- **Prompt Engineering:** Test alternative prompts to improve summarization quality  
-- **Rate Limiting:** Implement **exponential backoff** for handling `HTTP 429` errors
+Simply open [Lovable](https://lovable.dev/projects/e3a24c02-eb47-45c4-8484-83199c335c1c) and click on Share -> Publish.
 
----
+## Can I connect a custom domain to my Lovable project?
 
-## 📚 Resources
+Yes, you can!
 
-- 🔥 [Firecrawl Documentation](https://docs.firecrawl.dev/)  
-- 🤖 [OpenRouter Documentation](https://openrouter.ai/docs)  
-- 📘 [DeepSeek Model Details](https://deepseek.com/)
+To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+
+Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)

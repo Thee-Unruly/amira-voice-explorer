@@ -99,7 +99,7 @@ const Index: React.FC = () => {
       <div className="max-w-4xl w-full space-y-8">
         {/* Header */}
         <div className="text-center space-y-4">
-          <h1 className="text-6xl font-bold text-white mb-2">AMIRA</h1>
+          <h1 className="text-6xl font-bold text-white mb-2">AGILE</h1>
           <p className="text-xl text-gray-200">AI Voice Assistant for Web Search</p>
           <StatusIndicator status={status} isActive={isActive} />
         </div>
