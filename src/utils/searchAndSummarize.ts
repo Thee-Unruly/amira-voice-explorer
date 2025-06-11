@@ -95,21 +95,16 @@ const fetchDeepSeekResults = async (query: string): Promise<SearchResult> => {
     }
 
     if (!data.choices || data.choices.length === 0 || !data.choices[0].message.content) {
-      console.log('No results from DeepSeek, falling back to Firecrawl');
-      return await fetchFirecrawlResults(query);
+      console.log('No results from DeepSeek');
+      return { content: `No results found for "${cleanQuery}" using DeepSeek.`, source: 'DeepSeek' };
     }
 
     const content = data.choices[0].message.content;
-    if (isOutdatedResponse(content)) {
-      console.log('DeepSeek response outdated, falling back to Firecrawl');
-      return await fetchFirecrawlResults(query);
-    }
-
     console.log(`Received DeepSeek response for "${cleanQuery}"`);
     return { content, source: 'DeepSeek' };
   } catch (error) {
     console.error('OpenRouter API failed:', error);
-    return await fetchFirecrawlResults(query); // Fall back to Firecrawl
+    return { content: `DeepSeek search failed: ${error instanceof Error ? error.message : 'Unknown error'}.`, source: 'DeepSeek' };
   }
 };
 
@@ -200,12 +195,24 @@ const summarizeWithDeepSeek = async (content: string, maxLength: number = 120, m
 };
 
 // Main search and summarize function
-export const searchAndSummarize = async (query: string): Promise<string> => {
+export const searchAndSummarize = async (query: string, preferFirecrawl: boolean = false): Promise<string> => {
   try {
     console.log('Starting search for:', query);
 
-    // Fetch results (DeepSeek with Firecrawl fallback)
-    let result = await fetchDeepSeekResults(query);
+    let result: SearchResult;
+
+    // Decide whether to prioritize Firecrawl or DeepSeek
+    if (preferFirecrawl) {
+      console.log('Prioritizing Firecrawl for real-time data');
+      result = await fetchFirecrawlResults(query);
+    } else {
+      result = await fetchDeepSeekResults(query);
+      // Check if DeepSeek response is outdated
+      if (isOutdatedResponse(result.content)) {
+        console.log('DeepSeek response insufficient, falling back to Firecrawl');
+        result = await fetchFirecrawlResults(query);
+      }
+    }
 
     // If no useful results, return as-is
     if (result.content.length < 150 || result.content.includes('No results found')) {
