@@ -263,15 +263,16 @@ export const searchAndSummarize = async (
     
     let result: SearchResult;
 
-    if (requiresRealTime) {
-      console.log('Query requires real-time information - using Firecrawl');
+    // Always try Firecrawl FIRST for any query that might benefit from real-time data
+    if (requiresRealTime || query.toLowerCase().includes('news') || query.toLowerCase().includes('latest')) {
+      console.log('Using Firecrawl for real-time/current information');
       result = await fetchFirecrawlResults(query);
       
-      // If Firecrawl fails completely, fall back to DeepSeek but inform user
-      if (result.content.includes('Real-time search failed') || result.content.includes('No real-time results')) {
-        console.log('Firecrawl failed, falling back to DeepSeek with disclaimer');
+      // Only fall back to DeepSeek if Firecrawl completely fails (API error, not just no results)
+      if (result.content.includes('Real-time search failed') || result.content.includes('API key is missing')) {
+        console.log('Firecrawl API failed, falling back to DeepSeek with disclaimer');
         const fallbackResult = await fetchDeepSeekResults(query);
-        fallbackResult.content = `⚠️ Real-time search unavailable. Here's general information:\n\n${fallbackResult.content}`;
+        fallbackResult.content = `⚠️ Real-time search unavailable due to API issues. Here's general information:\n\n${fallbackResult.content}`;
         result = fallbackResult;
       }
     } else {
@@ -282,7 +283,7 @@ export const searchAndSummarize = async (
       if (isOutdatedResponse(result.content)) {
         console.log('DeepSeek response insufficient, trying Firecrawl for current information');
         const firecrawlResult = await fetchFirecrawlResults(query);
-        if (!firecrawlResult.content.includes('No real-time results')) {
+        if (!firecrawlResult.content.includes('No real-time results') && !firecrawlResult.content.includes('API key is missing')) {
           result = firecrawlResult;
         }
       }
@@ -325,6 +326,24 @@ export const searchAndSummarize = async (
     console.error('Error in searchAndSummarize:', error);
     return `I encountered an error while searching for information about "${query}". Please try again with different keywords or check your API configuration.`;
   }
+};
+
+// Debug function to test Firecrawl specifically
+export const testFirecrawlOnly = async (query: string): Promise<string> => {
+  console.log('Testing Firecrawl only for:', query);
+  
+  if (!FIRECRAWL_API_KEY) {
+    return 'Firecrawl API key is missing. Please check your environment variables.';
+  }
+  
+  const result = await fetchFirecrawlResults(query);
+  
+  if (result.content.length > 100 && !result.content.includes('No real-time results')) {
+    const summary = await summarizeWithDeepSeek(result.content, true, 200, 80);
+    return `🔍 **Firecrawl Test Results:**\n\n${summary}\n\n*Source: ${result.source}*`;
+  }
+  
+  return result.content;
 };
 
 // Specific function for real-time searches
