@@ -85,22 +85,47 @@ const fetchFirecrawlResults = async (query: string): Promise<SearchResult> => {
           onlyMainContent: true
         },
         scrapeOptions: { 
-          formats: ['markdown', 'html'],
+          formats: ['markdown'],
           onlyMainContent: true,
           excludeTags: ['nav', 'footer', 'aside', 'script', 'style']
         },
-        limit: 5 // Get more results for better coverage
+        limit: 5
       }),
     });
 
     console.log('Firecrawl API Response Status:', response.status);
+    console.log('Full Firecrawl Request Body:', JSON.stringify({
+      query: cleanQuery,
+      pageOptions: { onlyMainContent: true },
+      scrapeOptions: { formats: ['markdown'], onlyMainContent: true },
+      limit: 5
+    }));
 
     const data: FirecrawlResponse = await response.json();
+    console.log('Firecrawl Response:', JSON.stringify(data, null, 2));
 
-    if (!response.ok || !data.success || !data.data || data.data.length === 0) {
-      console.log('No Firecrawl results found');
+    if (!response.ok) {
+      console.error('Firecrawl API Error:', data);
       return { 
-        content: `No real-time results found for "${cleanQuery}". The information may not be available or the query might need refinement.`, 
+        content: `Firecrawl API error (${response.status}): ${data.error || response.statusText}`, 
+        source: 'Firecrawl',
+        isRealTime: true
+      };
+    }
+
+    if (!data.success) {
+      console.log('Firecrawl returned success=false:', data.error);
+      return { 
+        content: `Firecrawl search unsuccessful: ${data.error || 'Unknown error'}`, 
+        source: 'Firecrawl',
+        isRealTime: true
+      };
+    }
+
+    if (!data.data || data.data.length === 0) {
+      console.log('No Firecrawl results found - trying more specific terms');
+      return { 
+        content: `No real-time results found for "${cleanQuery}". Firecrawl search returned empty results. This might indicate the search terms are too broad or no current content is available.`, 
         source: 'Firecrawl',
         isRealTime: true
       };
@@ -108,18 +133,18 @@ const fetchFirecrawlResults = async (query: string): Promise<SearchResult> => {
 
     // Process and combine the best results
     const processedResults = data.data
-      .filter(item => item.content && item.content.length > 50) // Filter out very short content
-      .slice(0, 3) // Take top 3 results
+      .filter(item => item.content && item.content.length > 50)
+      .slice(0, 3)
       .map((item, index) => {
         const title = item.title ? `**${item.title}**\n` : '';
         const url = `Source: ${item.url}\n`;
-        const content = item.content.slice(0, 800); // Limit each result length
+        const content = item.content.slice(0, 800);
         return `${index + 1}. ${title}${url}${content}`;
       });
 
     if (processedResults.length === 0) {
       return { 
-        content: `No substantial content found for "${cleanQuery}". Try using more specific search terms.`, 
+        content: `Found ${data.data.length} results but content was too short or empty. Raw data: ${JSON.stringify(data.data.slice(0, 2))}`, 
         source: 'Firecrawl',
         isRealTime: true
       };
@@ -343,7 +368,28 @@ export const testFirecrawlOnly = async (query: string): Promise<string> => {
     return `🔍 **Firecrawl Test Results:**\n\n${summary}\n\n*Source: ${result.source}*`;
   }
   
-  return result.content;
+  return `🔍 **Firecrawl Debug Info:**\n\n${result.content}`;
+};
+
+// Test with multiple specific queries
+export const testMultipleQueries = async (): Promise<string> => {
+  const queries = [
+    'OpenAI GPT-4 news',
+    'ChatGPT updates 2025',
+    'Google Gemini AI',
+    'artificial intelligence breakthrough',
+    'AI companies funding'
+  ];
+  
+  const results = [];
+  
+  for (const query of queries) {
+    console.log(`Testing query: ${query}`);
+    const result = await testFirecrawlOnly(query);
+    results.push(`**Query: "${query}"**\n${result}\n\n---\n`);
+  }
+  
+  return results.join('\n');
 };
 
 // Specific function for real-time searches
