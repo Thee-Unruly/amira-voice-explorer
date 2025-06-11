@@ -52,16 +52,7 @@ This project provides a TypeScript-based tool to search for real-time informatio
 
 ---
 
-## 🔧 Configuration
-
-### Environment Variables _(in `.env`)_
-```env
-VITE_OPENROUTER_API_KEY=your_openrouter_api_key
-VITE_FIRECRAWL_API_KEY=fc-your_firecrawl_api_key
-
-----
-
-## 🛡️ Error Handling
+### 🛡️ Error Handling
 
 The code gracefully manages:
 
@@ -72,15 +63,14 @@ The code gracefully manages:
 
 ---
 
-## ⚠️ Limitations
-
+### ⚠️ Limitations
 - **API Quotas:** Firecrawl and OpenRouter enforce usage limits  
 - **Content Length:** Input is truncated to **1500 characters** to comply with summarization limits  
 - **Web Data Dependency:** Firecrawl’s effectiveness depends on the **availability and quality** of web content
 
 ---
 
-## 🌱 Potential Improvements
+### Potential Improvements
 
 - **Caching:** Store recent query results to reduce redundant API calls  
 - **Custom Models:** Add support for other LLMs (e.g., Claude, GPT-4o)  
