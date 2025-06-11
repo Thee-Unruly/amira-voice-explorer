@@ -55,7 +55,7 @@ const fetchDeepSeekResults = async (query: string): Promise<SearchResult> => {
     const enhancedPrompt = `Please provide a detailed and informative response about: "${cleanQuery}". 
     Include relevant facts, recent developments if known, and context. 
     If this involves current events or recent news, provide the most up-to-date information available to you.
-    Make your response comprehensive and informative, at least 200 words.`;
+    Make your response comprehensive and informative, at least 100 words.`;
 
     const response = await fetch(OPENROUTER_API_URL, {
       method: 'POST',
